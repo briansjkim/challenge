@@ -1,4 +1,4 @@
-import { GameBoardItemType, KeyToGameDirection, GameDirectionMap, GameDirectionToKeys, GameDirection, pillMax } from '../Map';
+import { GameBoardItemType, KeyToGameDirection, GameDirectionMap, GameDirectionToKeys, GameDirection, pillMax, GameDirectionReverseMap } from '../Map';
 import Item from './Item';
 
 class Pacman extends Item implements GameBoardItem {
@@ -6,6 +6,7 @@ class Pacman extends Item implements GameBoardItem {
   type:GameBoardItemType = GameBoardItemType.PACMAN;
 
   desiredMove: string | false = false;
+  grabBiscuit: string | false = false;
 
   score:number = 0;
 
@@ -43,29 +44,70 @@ class Pacman extends Item implements GameBoardItem {
   getNextMove(): GameBoardItemMove | boolean {
 
     const { moves } = this.piece;
+    let dangerFound: boolean = false;
+    let goBackwards: GameBoardPiece = this.piece;
+    let directionBackwards: string = GameDirectionMap[this.direction];
+
+    // if Pacman grabbed a biscuit, attack the ghost until the timer runs out
+    let biscuitGrabbed: boolean = false;
+
+    const changeMoves: GameBoardItemMoves = {};
 
     let move: GameBoardItemMove | false = false;
+    for (let i in moves) {
+      if (i) {
+        let move = moves[i];
+        if (this.items[move.y][move.x].type !== GameBoardItemType.GHOST) {
+          // looking for ghost in its current direction
+          let ghost = this.findItem(i, GameBoardItemType.GHOST);
+          // looking for biscuit in its current direction
+          let biscuit = this.findItem(i, GameBoardItemType.BISCUIT);
 
-    // If there is a keyboard move, use it and clear it
-    if (this.desiredMove) {    
-      if (moves[this.desiredMove]) {
-        move = {piece: moves[this.desiredMove], direction: GameDirectionMap[this.desiredMove]};
-        this.desiredMove = false;
+          // if ghost is found
+          if (ghost) {
+            dangerFound = true;
+          }
+
+          // if biscuit is found
+          if (biscuit) {
+            // grab it by setting the biscuit to the current index
+            this.grabBiscuit = i;
+            // then move pacman to that index
+            return { piece: move, direction: GameDirectionMap[i] }
+          }
+
+          // if pacman grabbed a biscuit and there is a ghost, move towards it
+          if (ghost && biscuitGrabbed) {
+            return { piece: move, direction: GameDirectionMap[i] }
+          }
+
+          // if there aren't any ghosts, move pacman to it
+          if (!dangerFound && GameDirectionMap[GameDirectionReverseMap[i]] !== this.direction) {
+            changeMoves[i] = move;
+          } else if (GameDirectionMap[GameDirectionReverseMap[i]] === this.direction) {
+            // if a biscuit isn't there, go the other direction
+            goBackwards = move;
+            directionBackwards = i;
+          }
+        }
       }
     }
-    
-    // Otherwise, continue in the last direction
-    if (!move && this.direction !== GameDirection.NONE) {
-      const key = GameDirectionToKeys(this.direction);
-      if (moves[key]) {
-        move = {piece: moves[key], direction: this.direction};
-      }
+
+    // if a ghost is found, go the opposite direction
+    if (dangerFound) {
+      changeMoves[directionBackwards] = goBackwards;
     }
 
-    return move;
+    const changedMoveIdx = Object.keys(changeMoves);
+
+    if (changedMoveIdx.length < 1) {
+      return false;
+    }
+
+    const movePacman = Math.floor(Math.random() * changedMoveIdx.length);
+    return { piece: changeMoves[changedMoveIdx[movePacman]], direction: GameDirectionMap[changedMoveIdx[movePacman]]}
 
   }
-
   /**
    * Move Pacman and "eat" the item
    * 
